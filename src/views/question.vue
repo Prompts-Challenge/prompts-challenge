@@ -1,48 +1,34 @@
 <template>
-  <div class="w-full h-full overflow-auto p-2 sm:p-5">
+  <div class="w-full h-full overflow-auto p-5">
     <!-- 加载状态 -->
-    <div v-if="loading" class="flex items-center justify-center h-32">
+    <div v-if="loading" class="flex items-center justify-center h-full">
       <div class="text-gray-600">加载中...</div>
     </div>
 
     <!-- 错误状态 -->
-    <div v-if="error" class="flex items-center justify-center h-32">
+    <div v-else-if="error" class="flex items-center justify-center h-full">
       <div class="text-red-600">{{ error }}</div>
     </div>
 
     <!-- 题目内容 -->
     <template v-else-if="question">
       <!-- 题目头部信息 -->
-      <div class="border-2 border-dashed mb-2 sm:mb-5">
-        <div class="p-3 sm:p-4 border-b-2 border-dashed flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <h1 class="text-lg sm:text-xl font-medium">{{ question.title }}</h1>
-            <div v-if="question.metadata?.difficulty" 
-                 :class="{
-                   'text-sm px-2 py-1': true,
-                   'text-green-600': question.metadata.difficulty === 'easy',
-                   'text-yellow-600': question.metadata.difficulty === 'medium',
-                   'text-red-600': question.metadata.difficulty === 'hard'
-                 }">
-              {{ getDifficultyText(question.metadata.difficulty) }}
-            </div>
+      <div class="border-2 border-dashed mb-5">
+        <div class="p-4 border-b-2 border-dashed flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <h1 class="text-xl font-medium">{{ question.title }}</h1>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex gap-2">
             <span v-for="tag in question.tags" 
                   :key="tag"
-                  class="px-2 py-1 text-xs sm:text-sm border-2 border-dashed hover:bg-[#e5e7eb]">
+                  class="px-3 py-1 text-sm border-2 border-dashed hover:bg-[#e5e7eb]">
               {{ tag }}
             </span>
           </div>
         </div>
         
-        <!-- 题目描述 -->
-        <div v-if="question.description" class="p-3 sm:p-4 border-b-2 border-dashed">
-          <p class="text-sm sm:text-base text-gray-600">{{ question.description }}</p>
-        </div>
-
         <!-- 题目统计信息 -->
-        <div class="p-3 sm:p-4 flex flex-wrap gap-3 sm:gap-8 text-xs sm:text-sm text-gray-600">
+        <div class="p-4 flex gap-8 text-sm text-gray-600">
           <div>作者：{{ question.author.login }}</div>
           <div>创建时间：{{ new Date(question.createdAt).toLocaleDateString() }}</div>
           <div>评论数：{{ question.comments }}</div>
@@ -50,40 +36,74 @@
         </div>
       </div>
 
+      <!-- 题目描述 -->
+      <div class="p-4 border-b-2 border-dashed">
+        <p class="text-gray-600">{{ question.body }}</p>
+      </div>
+
       <!-- 题目内容和编辑器区域 -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-5 h-[calc(100%-11rem)]">
+      <div class="grid grid-cols-2 gap-5 h-[calc(100%-11rem)]">
         <!-- 左侧：题目详细内容 -->
         <div class="border-2 border-dashed overflow-auto">
-          <div class="p-3 sm:p-4 border-b-2 border-dashed">
-            <h2 class="text-base sm:text-lg font-medium">题目详情</h2>
+          <div class="p-4 border-b-2 border-dashed">
+            <h2 class="text-lg font-medium">题目详情</h2>
           </div>
-          <div class="p-3 sm:p-4 prose prose-sm max-w-none" v-html="renderedContent"></div>
+          <div class="p-4 prose prose-sm max-w-none" v-html="renderedContent"></div>
         </div>
 
-        <!-- 右侧：编辑器 -->
+        <!-- 右侧：Prompt编辑器 -->
         <div class="border-2 border-dashed flex flex-col">
-          <div class="p-3 sm:p-4 border-b-2 border-dashed flex items-center justify-between">
-            <h2 class="text-base sm:text-lg font-medium">编辑器</h2>
-            <button 
-              class="px-3 sm:px-4 py-1 text-sm border-2 border-dashed hover:bg-[#e5e7eb]">
-              提交
-            </button>
+          <div class="p-4 border-b-2 border-dashed flex justify-between items-center">
+            <h2 class="text-lg font-medium">编写 Prompt</h2>
+            <div class="flex gap-2">
+              <button 
+                @click="addPrompt"
+                class="px-4 py-2 border-2 border-dashed hover:bg-[#e5e7eb]">
+                添加对话
+              </button>
+              <button 
+                @click="handleSubmit"
+                class="px-4 py-2 border-2 border-dashed hover:bg-[#e5e7eb]">
+                提交
+              </button>
+            </div>
           </div>
-          <div class="flex-1">
-            <MonacoEditor
-              v-model="code"
-              language="markdown"
-              :options="{
-                minimap: { enabled: false },
-                wordWrap: 'on'
-              }"
-            />
+          <div class="flex-1 overflow-auto">
+            <div v-for="(prompt, index) in prompts" 
+                 :key="index"
+                 class="border-b-2 border-dashed last:border-b-0">
+              <!-- 编辑器头部 -->
+              <div class="p-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                  <select 
+                    v-model="prompt.role"
+                    class="px-3 py-1 border-2 border-dashed focus:outline-none hover:bg-[#e5e7eb]">
+                    <option value="system">System</option>
+                    <option value="user">User</option>
+                    <option value="assistant">Assistant</option>
+                  </select>
+                  <span class="text-sm text-gray-500">
+                    {{ getRoleDescription(prompt.role) }}
+                  </span>
+                </div>
+                <button 
+                  @click="removePrompt(index)"
+                  class="text-red-500 hover:text-red-700">
+                  删除
+                </button>
+              </div>
+              <!-- 编辑器 -->
+              <div class="h-[200px]">
+                <MonacoEditor
+                  v-model="prompt.content"
+                  language="markdown"
+                  :options="editorOptions as any"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      <!-- 评论组件 -->
-      <Comments :discussion-id="question.id" />
     </template>
   </div>
 </template>
@@ -96,7 +116,6 @@ import type { Question } from '../services/github'
 import MonacoEditor from '../components/MonacoEditor.vue'
 import MarkdownIt from 'markdown-it'
 import hljs from 'highlight.js'
-import Comments from '../components/Comments.vue'
 
 const route = useRoute()
 const question = ref<Question | null>(null)
@@ -144,10 +163,7 @@ const editorOptions = {
 }
 
 // 渲染 Markdown 内容
-const renderedContent = computed(() => {
-  if (!question.value?.body) return ''
-  return md.render(question.value.body)
-})
+const renderedContent = computed(() => md.render(question.value?.body || ''))
 
 interface Prompt {
   role: 'system' | 'user' | 'assistant'
@@ -201,19 +217,6 @@ const handleSubmit = () => {
   // 过滤掉空内容的prompt
   const validPrompts = prompts.value.filter(p => p.content.trim())
   console.log('提交的Prompts：', validPrompts)
-}
-
-const getDifficultyText = (difficulty: string) => {
-  switch (difficulty) {
-    case 'easy':
-      return '简单'
-    case 'medium':
-      return '中等'
-    case 'hard':
-      return '困难'
-    default:
-      return difficulty
-  }
 }
 </script>
 
