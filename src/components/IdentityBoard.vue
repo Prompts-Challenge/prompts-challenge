@@ -9,7 +9,7 @@ const name = ref<string | null>(null);
 const id = ref<string | null>(null);
 
 if (isLoggedIn) {
-  const user = getCurrentUser()
+  const user = await getCurrentUser()
   avatarUrl.value = user?.avatar_url!;
   name.value = user?.name!;
   id.value = user?.name!;
@@ -22,10 +22,10 @@ if (isLoggedIn) {
       <img :src="avatarUrl!" alt="test" class="w-full h-full object-cover" v-if="isLoggedIn">
     </div>
     <div class="flex h-full w-full flex-col p-1">
-      <div class="flex flex-grow-[5] border-2 border-dashed w-full">
-        <span class="font-mono text-sm" v-if="isLoggedIn">{{ name }}</span>
+      <div class="flex flex-grow-[5] border-2 border-dashed w-full items-center pl-3">
+        <span class="font-mono text-md" v-if="isLoggedIn">{{ name }}</span>
       </div>
-      <div class="flex flex-grow-[3] border-2 border-dashed w-full">
+      <div class="flex flex-grow-[3] border-2 border-dashed w-full items-center pl-3">
         <span class="font-mono text-sm" v-if="isLoggedIn">{{ id }}</span>
       </div>
     </div>

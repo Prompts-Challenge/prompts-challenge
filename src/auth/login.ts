@@ -1,87 +1,83 @@
 import { Octokit } from '@octokit/rest';
-
-export interface GithubUser {
-  id: number;
-  login: string;
-  name: string | null;
-  email: string | null;
-  avatar_url: string;
-}
+import { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from './info';
 
 export async function handleGithubCallback() {
   try {
-    // 从 URL 获取授权码
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    
     if (!code) {
       throw new Error('No code provided');
     }
-
-    // 通过 GitHub OAuth 获取 token
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    
+    // Add error handling for token exchange
+    const tokenResponse = await fetch(`https://github.com/login/oauth/access_token?client_id=${GITHUB_CLIENT_ID}&code=${code}&client_secret=${GITHUB_CLIENT_SECRET}`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        client_id: 'Ov23li5FzXmDStLNLIkY',
+        client_id: GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
         code,
       }),
     });
 
-    const { access_token } = await tokenResponse.json();
+    const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) {
+      throw new Error('Failed to obtain access token: ' + JSON.stringify(tokenData));
+    }
 
-    // 使用 token 创建 Octokit 实例
-    const octokit = new Octokit({ auth: access_token });
+    const octokit = new Octokit({ auth: tokenData.access_token });
     
-    // 获取用户信息
-    const { data: userData } = await octokit.users.getAuthenticated();
-
-    // 保存用户信息到 localStorage
-    const user: GithubUser = {
-      id: userData.id,
-      login: userData.login,
-      name: userData.name,
-      email: userData.email,
-      avatar_url: userData.avatar_url,
-    };
-    
-    localStorage.setItem('github_user', JSON.stringify(user));
-    localStorage.setItem('github_token', access_token);
-
-    return user;
+    // Verify token works by making API call
+    try {
+      const { data: userData } = await octokit.users.getAuthenticated();
+      localStorage.setItem('github_user', JSON.stringify(userData));
+      localStorage.setItem('github_token', tokenData.access_token);
+      return userData;
+    } catch (apiError) {
+      console.error('GitHub API authentication failed:', apiError);
+      throw new Error('Failed to authenticate with GitHub API');
+    }
   } catch (error) {
     console.error('GitHub登录失败:', error);
+    // Clear any potentially invalid tokens
+    localStorage.removeItem('github_user');
+    localStorage.removeItem('github_token');
     throw error;
   }
 }
 
-// 发起 GitHub 登录
 export function redirectToGithub() {
   const githubAuthUrl = new URL('https://github.com/login/oauth/authorize');
-  githubAuthUrl.searchParams.append('client_id', 'Ov23li5FzXmDStLNLIkY');
-  githubAuthUrl.searchParams.append('scope', 'read:user user:email');
-  
-  // 添加当前页面 URL 作为 state，用于登录后返回
+  githubAuthUrl.searchParams.append('client_id', GITHUB_CLIENT_ID);
+  githubAuthUrl.searchParams.append('scope', 'read:user user:email public_repo');
   githubAuthUrl.searchParams.append('state', window.location.pathname);
-  
   window.location.href = githubAuthUrl.toString();
 }
 
-// 检查用户是否已登录
 export function isGithubLoggedIn(): boolean {
   return localStorage.getItem('github_token') !== null;
 }
 
-// 获取当前登录用户信息
-export function getCurrentUser(): GithubUser | null {
-  const userStr = localStorage.getItem('github_user');
-  return userStr ? JSON.parse(userStr) : null;
+export async function getCurrentUser(): Promise<ReturnType<typeof handleGithubCallback> | null> {
+  const token = localStorage.getItem('github_token');
+  if (!token) {
+    return null;
+  }
+  try {
+    const octokit = new Octokit({ auth: token });
+    const { data: userData } = await octokit.users.getAuthenticated();
+    localStorage.setItem('github_user', JSON.stringify(userData));
+    return userData;
+  } catch (error) {
+    console.error('Failed to fetch current user:', error);
+    const userStr = localStorage.getItem('github_user');
+    return userStr ? JSON.parse(userStr) : null;
+  }
 }
 
-// 登出
 export function logout() {
   localStorage.removeItem('github_user');
   localStorage.removeItem('github_token');
